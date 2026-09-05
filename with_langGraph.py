@@ -12,7 +12,7 @@ class State(TypedDict):
     search_results: list
     results_good: bool
     answer: str
-    
+    loop_count: int
     
 #defining LLM
 llm = init_chat_model(
@@ -23,10 +23,15 @@ llm = init_chat_model(
 
 #defining search function
 def search_web_node(state:State):
+    
     results = DDGS().text(
         state["question"]
     )
-    return {"search_results":results}
+    new_count = state["loop_count"];
+    new_count = new_count + 1
+    return {"search_results":results,
+            "loop_count": new_count
+            }
 
 
 def check_results_node(state:State):
@@ -77,7 +82,7 @@ def generate_answer(state:State):
 
 #decide where to go
 def route(state:State):
-    if state["results_good"]:
+    if state["results_good"] or state["loop_count"] > 2:
         return "generate_answer"
     else:
         return "search_web"
@@ -117,7 +122,8 @@ result = graph.invoke({
     "question":"What is the price of Jaguar?",
     "search_results":[],
     "answer":"",
-    "results_good":False
+    "results_good":False,
+    "loop_count":0
 })
 
 print(result["answer"])
