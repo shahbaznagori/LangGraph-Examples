@@ -15,3 +15,8 @@ By comparing both implementations, you can clearly understand:
 - When using LangGraph actually makes sense
 
 The goal is not just to learn the syntax, but to build a clear mental model of LangGraph.
+
+Added MongoDB checkpointing
+  -I have added mongodb check pointing in new commit
+  -Added a conditional route which first search from the same thread from mongodb if it finds then     give result from there if not it does the web search and  stores in mongodb.
+  -This example has running both web searching and storing data in database and then in the next part of string it is fetching the data from database and shows findings from the mongodb instead of web searching.

@@ -1,11 +1,13 @@
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langchain.chat_models import init_chat_model
+from langgraph.checkpoint.mongodb import MongoDBSaver
 from ddgs import DDGS
 from dotenv import load_dotenv
+import os
 
 load_dotenv()
-
+MONGODB_URI = os.getenv("MONGODB")
 
 class State(TypedDict):
     question: str
@@ -20,10 +22,17 @@ llm = init_chat_model(
     model_provider="groq"
 )
 
+#Defininng node for checking existing routes.
+def check_existing_results(state: State):
+    if state["search_results"]:
+        return "reuse"
+
+    return "search"
+
 
 #defining search function
 def search_web_node(state:State):
-    
+    print("SEARCHING")
     results = DDGS().text(
         state["question"]
     )
@@ -95,9 +104,16 @@ graph_builder = StateGraph(State)
 graph_builder.add_node("search_web",search_web_node)
 graph_builder.add_node("check_results",check_results_node)
 graph_builder.add_node("generate_answer",generate_answer)
-
 #Defining Workflow
-graph_builder.add_edge(START,"search_web")
+graph_builder.add_conditional_edges(START ,
+                                    check_existing_results,
+                                    {
+                                        "reuse": "generate_answer",
+                                        "search": "search_web"
+                                    }
+                         
+                       )
+# graph_builder.add_edge(START,"search_web")
 graph_builder.add_edge("search_web","check_results")
 
 #Checking conditional edge instead of if/else
@@ -115,15 +131,43 @@ graph_builder.add_edge("generate_answer",END)
 
 
 #compiling graph
-graph = graph_builder.compile()
+# graph = graph_builder.compile()
 
-#Run
-result = graph.invoke({
-    "question":"What is the price of Jaguar?",
-    "search_results":[],
-    "answer":"",
-    "results_good":False,
-    "loop_count":0
-})
+with MongoDBSaver.from_conn_string(
+    MONGODB_URI,
+    "langgraph"
+) as checkpointer:
 
-print(result["answer"])
+    graph = graph_builder.compile(
+        checkpointer=checkpointer
+    )
+
+    config = {
+        "configurable": {
+            "thread_id": "srk"
+        }
+    }
+
+    for chunk in graph.stream(
+    {
+        "question": "All about shahrukh khan net worth",
+        "search_results": [],
+        "answer": "",
+        "results_good": False,
+        "loop_count": 0
+    },
+    config=config
+    ):
+        print(chunk)
+        
+    print("THE SECOND SEARCH FROM MONGODB")
+    # SECOND QUESTION
+    for chunk in graph.stream(
+        {
+         "question": "What is the net worth of Shahrukh khan",
+        },
+        config=config
+    ):
+        print("THE_RESULT IS FROM MONGODB",chunk)
+
+
